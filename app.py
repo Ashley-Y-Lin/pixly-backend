@@ -55,25 +55,20 @@ def create_photo():
     file_object = request.files["fileObject"]
 
     s3_file_path = upload_photo_s3(file_object)
-    print("s3_file_path", s3_file_path)
 
-    return jsonify()
+    exif_data = get_exif_data(file_object)
 
-    # TODO: get exif data here
-    # exif_data = get_exif_data(file_object)
-    # print("exifData", exif_data)
+    photo = Photo(
+        caption=caption,
+        aws_s3=s3_file_path,
+        exif_data=exif_data or {},
+    )
 
-    # photo = Photo(
-    #     caption=caption,
-    #     aws_s3=s3_file_path,
-    #     exif_data=exif_data or {},
-    # )
-
-    # db.session.add(photo)
-    # db.session.commit()
+    db.session.add(photo)
+    db.session.commit()
 
     # POST requests should return HTTP status of 201 CREATED
-    # return (jsonify(photo=photo.to_dict()), 201)
+    return (jsonify(photo=photo.to_dict()), 201)
 
 
 @app.get("/api/photos/<int:photo_id>")

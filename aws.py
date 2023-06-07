@@ -17,10 +17,6 @@ s3 = session.client("s3")
 
 
 def upload_photo_s3(fileObject):
-    print("upload_photo_s3 is running")
-    print(os.environ.get("AWS_ACCESS_KEY_ID"))
-    print(os.environ.get("AWS_SECRET_KEY"))
-
     try:
         response = s3.put_object(
             Bucket=S3_BUCKET,

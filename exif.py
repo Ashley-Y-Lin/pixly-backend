@@ -1,5 +1,6 @@
 from PIL import Image
 from PIL.ExifTags import TAGS
+from fractions import Fraction
 
 
 def get_exif_data(file_object):
@@ -8,25 +9,28 @@ def get_exif_data(file_object):
     Takes as input a file_object (instance of FileStorage). Returns an object
     containing EXIF metadata fields that can be accessed.
     """
-
     image = Image.open(file_object)
 
-    if hasattr(image, "exif"):
-        exif_data = image._getexif()
-        out_exif = {}
+    exif_data = image.getexif()
 
-        if exif_data is not None:
-            for tagid in exif_data:
-                # getting the tag name instead of tag id
-                tagname = TAGS.get(tagid, tagid)
+    out_exif = {}
 
-                # passing the tagid to get its respective value
-                value = exif_data.get(tagid)
+    for tagid in exif_data:
+        tagname = TAGS.get(tagid, tagid)
+        value = exif_data.get(tagid)
 
-                # add tagname and value to out_exif
-                out_exif.tagname = value
+        if isinstance(value, int) or isinstance(value, str):
+            print(f"normal, value = {value}, type = {type(value)}")
 
-        return out_exif
+        else:
+            print(f"not normal, type = {type(value)}")
 
-    else:
-        print("No EXIF metadata found.")
+            if value.denominator == 0:
+                value = int(value.numerator)
+            else:
+                value = int(value.numerator / value.denominator)
+            print(f"not normal but changed, type = {type(value)}")
+
+        out_exif[tagname] = value
+
+    return out_exif
