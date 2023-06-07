@@ -2,11 +2,15 @@
 
 import os
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, Response
+from flask_cors import CORS
 
 from models import db, connect_db, Photo
+from aws import upload_photo_s3
+from exif import get_exif_data
 
 app = Flask(__name__)
+CORS(app)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URL", "postgresql:///photos"
@@ -15,6 +19,12 @@ app.config["SQLALCHEMY_ECHO"] = True
 app.config["SECRET_KEY"] = "ashley-secret"
 
 connect_db(app)
+
+
+@app.before_request
+def basic_authentication():
+    if request.method.lower() == "options":
+        return Response()
 
 
 @app.get("/api/photos")
@@ -33,23 +43,37 @@ def list_photos():
 def create_photo():
     """Add photo, and return data about new photo.
 
+    Takes asn input formData representing a photo like:
+        { caption, fileObject }
+
     Returns JSON like:
         {photo: [{id, caption, aws_s3, exif_data}]}
     """
+    print("create_photos is running")
 
-    data = request.json
+    caption = request.form.get("caption")
+    file_object = request.files["fileObject"]
 
-    photo = Photo(
-        caption=data["caption"],
-        aws_s3=data["aws_s3"],
-        exif_data=data["exif_data"] or {},
-    )
+    s3_file_path = upload_photo_s3(file_object)
+    print("s3_file_path", s3_file_path)
 
-    db.session.add(photo)
-    db.session.commit()
+    return jsonify()
+
+    # TODO: get exif data here
+    # exif_data = get_exif_data(file_object)
+    # print("exifData", exif_data)
+
+    # photo = Photo(
+    #     caption=caption,
+    #     aws_s3=s3_file_path,
+    #     exif_data=exif_data or {},
+    # )
+
+    # db.session.add(photo)
+    # db.session.commit()
 
     # POST requests should return HTTP status of 201 CREATED
-    return (jsonify(photo=photo.to_dict()), 201)
+    # return (jsonify(photo=photo.to_dict()), 201)
 
 
 @app.get("/api/photos/<int:photo_id>")
