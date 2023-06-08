@@ -4,6 +4,7 @@ import os
 
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
+from sqlalchemy import create_engine, text
 
 from models import db, connect_db, Photo
 from aws import upload_photo_s3, remove_photo_s3
@@ -20,11 +21,27 @@ app.config["SECRET_KEY"] = "ashley-secret"
 
 connect_db(app)
 
+engine = create_engine(app.config["SQLALCHEMY_DATABASE_URI"])
+
+with engine.connect() as connection:
+    try:
+        result = connection.execute(text("SELECT * FROM photos"))
+        print("Connection successful!")
+    except Exception as e:
+        print(f"Connection error: {str(e)}")
+
+    # connection.execute(
+    #     "CREATE INDEX IF NOT EXISTS captions_search_idx ON photos USING GIN (to_tsvector('english', caption))"
+    # )
+
 
 @app.before_request
 def basic_authentication():
     if request.method.lower() == "options":
         return Response()
+
+
+######### PHOTOS ROUTES #########
 
 
 @app.get("/api/photos")
@@ -108,6 +125,7 @@ def remove_photo(photo_id):
 
     Returns JSON of {deleted: "photo_id"}
     """
+    print("the delete is running")
 
     photo = Photo.query.get_or_404(photo_id)
 
@@ -117,3 +135,21 @@ def remove_photo(photo_id):
     db.session.commit()
 
     return jsonify(deleted=photo_id)
+
+
+######### SEARCH ROUTES #########
+
+
+@app.get("/api/photos/search/<search_term>")
+def search_photos(search_term):
+    print("search term", search_term)
+
+    with engine.connect() as connection:
+        query = "SELECT row_to_json(t) FROM (SELECT * FROM photos WHERE to_tsvector('english', caption) @@ to_tsquery(:search_term)) t"
+
+        result = connection.execute(text(query), {"search_term": search_term})
+
+        rows = [row[0] for row in result]
+        print("returned rows", rows)
+
+        return jsonify(photos=rows)
