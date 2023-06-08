@@ -14,6 +14,8 @@ class Photo(db.Model):
 
     caption = db.Column(db.String(200), nullable=False, default="")
 
+    file_name = db.Column(db.String(200), nullable=False, default="")
+
     aws_s3 = db.Column(db.String(500), nullable=False)
 
     exif_data = db.Column(db.JSON, nullable=False, default={})
@@ -24,6 +26,7 @@ class Photo(db.Model):
         return {
             "id": self.id,
             "caption": self.caption,
+            "file_name": self.file_name,
             "aws_s3": self.aws_s3,
             "exif_data": self.exif_data,
         }

@@ -28,3 +28,17 @@ def upload_photo_s3(fileObject):
     except Exception as e:
         print(f"Error uploading file: {e}")
         return None
+
+
+def remove_photo_s3(photo):
+    print("remove photo is running")
+
+    try:
+        response = s3.delete_object(
+            Bucket=S3_BUCKET,
+            Key=photo.file_name,
+        )
+        return photo.file_name
+    except Exception as e:
+        print(f"Error removing file from S3: {e}")
+        return None
