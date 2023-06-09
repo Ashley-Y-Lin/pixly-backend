@@ -1,6 +1,7 @@
 """Flask app for Pix.ly"""
 
 import os
+import json
 
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
@@ -29,10 +30,6 @@ with engine.connect() as connection:
         print("Connection successful!")
     except Exception as e:
         print(f"Connection error: {str(e)}")
-
-    # connection.execute(
-    #     "CREATE INDEX IF NOT EXISTS captions_search_idx ON photos USING GIN (to_tsvector('english', caption))"
-    # )
 
 
 @app.before_request
@@ -125,7 +122,6 @@ def remove_photo(photo_id):
 
     Returns JSON of {deleted: "photo_id"}
     """
-    print("the delete is running")
 
     photo = Photo.query.get_or_404(photo_id)
 
@@ -140,16 +136,58 @@ def remove_photo(photo_id):
 ######### SEARCH ROUTES #########
 
 
-@app.get("/api/photos/search/<search_term>")
-def search_photos(search_term):
-    print("search term", search_term)
+@app.get("/api/photos/search-caption/<search_term>")
+def search_photos_caption(search_term):
+    """Searches photos for search term in caption, using PostgreSQL full-text
+    search. Used in caption search on front-end.
+
+    Returns JSON like:
+        {photos: [{id, caption, file_name, aws_s3, exif_data}, ...]}
+    """
 
     with engine.connect() as connection:
-        query = "SELECT row_to_json(t) FROM (SELECT * FROM photos WHERE to_tsvector('english', caption) @@ to_tsquery(:search_term)) t"
+        query = """
+        SELECT row_to_json(t)
+        FROM (
+            SELECT *
+            FROM photos
+            WHERE to_tsvector('english', caption) @@ to_tsquery(:search_term)
+        ) t
+        """
 
         result = connection.execute(text(query), {"search_term": search_term})
 
         rows = [row[0] for row in result]
-        print("returned rows", rows)
+
+        return jsonify(photos=rows)
+
+
+@app.get("/api/photos/search-metadata/<search_term>")
+def search_photos_metadata(search_term):
+    """Searches photos for given metadata field values, using PostgreSQL
+    full-text search. Used in metadata search on front-end.
+
+    Takes as input a string of exif_field:search_value pairs, separated by a
+    comma, like 'Make:Canon,Model:400'
+
+    Returns JSON like:
+        {photos: [{id, caption, file_name, aws_s3, exif_data}, ...]}
+    """
+    print("search_photos_metadata is running")
+
+    with engine.connect() as connection:
+        query = """
+        SELECT row_to_json(t)
+        FROM (
+            SELECT *
+            FROM photos
+            WHERE json_to_tsvector('English', exif_data, '"all"') @@ to_tsquery('make & canon')
+        ) t
+        """
+
+        result = connection.execute(text(query))
+        # print("all rows", result.fetchall())
+
+        rows = [row[0] for row in result]
 
         return jsonify(photos=rows)
