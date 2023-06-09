@@ -7,7 +7,7 @@ from flask_cors import CORS
 from sqlalchemy import create_engine, text
 from werkzeug.datastructures import FileStorage
 
-from PIL import Image
+from PIL import Image, ImageOps, ImageChops, ImageFilter
 import requests
 
 from models import db, connect_db, Photo
@@ -87,6 +87,17 @@ def create_photo():
     return (jsonify(photo=photo.to_dict()), 201)
 
 
+@app.post("/api/photos-bulk")
+def create_photos_bulk():
+    """Adds a bunch of photos to the database, returns number of photos added.
+
+    Takes as input an array of photos objects like:
+        [ { caption, URL }... ]
+
+    Returns JSON like: { photosAdded: int }
+    """
+
+
 @app.get("/api/photos/<int:photo_id>")
 def get_photo(photo_id):
     """Return data on specific photo.
@@ -113,7 +124,13 @@ def update_photo(photo_id):
 
     photo = Photo.query.get_or_404(photo_id)
 
+    if data.get("aws_s3"):
+        remove_photo_s3(photo)
+
     photo.caption = data.get("caption", photo.caption)
+    photo.file_name = data.get("file_name", photo.file_name)
+    photo.aws_s3 = data.get("aws_s3", photo.aws_s3)
+    photo.exif_data = data.get("exif_data", photo.exif_data)
 
     db.session.add(photo)
     db.session.commit()
@@ -203,7 +220,8 @@ def create_edit_preview(photo_id, edit_type):
     """Edits photo, and returns local file link to edited photo preview.
 
     Returns JSON like: {editedPhotoURL}
-        where editedPhotoURL is the local file path to edited photo
+        where editedPhotoURL is an object like
+        {file_name: string, aws_s3: string, exif_data: object}
     """
 
     photo_data = Photo.query.get_or_404(photo_id)
@@ -217,11 +235,17 @@ def create_edit_preview(photo_id, edit_type):
 
     image = Image.open(local_path)
 
-    # TODO: change edit type here
-    edited_image = image.convert("L")
+    if edit_type == "blackAndWhite":
+        edited_image = image.convert("L")
+    elif edit_type == "addBorder":
+        edited_image = ImageOps.expand(image, border=30, fill="black")
+    elif edit_type == "invertColors":
+        edited_image = ImageChops.invert(image)
+    elif edit_type == "sketch":
+        edited_image = image.convert("L").filter(ImageFilter.FIND_EDGES)
 
-    edited_photo_filename = f"edited-{photo_id}.jpg"
-    edited_photo_url = f"/Users/AshleyLin1/rithm/exercises/pix.ly/pix.ly frontend/pixly/src/edit-previews/edited-{photo_id}.jpg"
+    edited_photo_filename = f"edited-{photo_data.file_name}.jpg"
+    edited_photo_url = f"/Users/AshleyLin1/rithm/exercises/pix.ly/pix.ly frontend/pixly/src/edit-previews/edited-{photo_data.file_name}.jpg"
     edited_image.save(edited_photo_url)
 
     file_object = open(edited_photo_url, "rb")
@@ -233,7 +257,16 @@ def create_edit_preview(photo_id, edit_type):
     )
 
     s3_file_path = upload_photo_s3(file_storage)
+    exif_data = get_exif_data(file_storage)
 
     file_object.close()
+    os.remove(local_path)
+    os.remove(edited_photo_url)
 
-    return {"editedPhotoURL": s3_file_path}
+    return {
+        "editedPhotoURL": {
+            "file_name": edited_photo_filename,
+            "aws_s3": s3_file_path,
+            "exif_data": exif_data,
+        }
+    }

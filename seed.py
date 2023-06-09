@@ -4,12 +4,10 @@ from models import db, Photo
 db.drop_all()
 db.create_all()
 
-# FIXME: fake aws_s3 and file_name right now!
-
 c1 = Photo(
-    caption="sunset",
-    aws_s3="https://t4.ftcdn.net/jpg/01/04/78/75/360_F_104787586_63vz1PkylLEfSfZ08dqTnqJqlqdq0eXx.jpg",
-    file_name="fake1",
+    caption="dandelions",
+    aws_s3="https://pixly-ashleylin.s3.amazonaws.com/dandelions.jpeg",
+    file_name="dandelions.jpeg",
     exif_data={
         "Camera Make": "Canon",
         "Camera Model": "EOS 80D",
@@ -21,9 +19,9 @@ c1 = Photo(
 )
 
 c2 = Photo(
-    caption="bird",
-    aws_s3="https://www.dpreview.com/files/p/articles/1852634480/_9959.jpeg",
-    file_name="fake2",
+    caption="strawberries",
+    aws_s3="https://pixly-ashleylin.s3.amazonaws.com/strawberries.jpeg",
+    file_name="strawberries.jpeg",
     exif_data={
         "Camera Make": "Nikon",
         "Camera Model": "D750",
@@ -35,9 +33,9 @@ c2 = Photo(
 )
 
 c3 = Photo(
-    caption="elephants",
-    aws_s3="https://i.natgeofe.com/n/2745c809-e54d-41e5-8391-06ab2ffcafc3/NationalGeographic_1422702.jpg",
-    file_name="fake3",
+    caption="tomatoes",
+    aws_s3="https://pixly-ashleylin.s3.amazonaws.com/tomatoes.jpeg",
+    file_name="tomatoes.jpeg",
     exif_data={
         "Camera Make": "Sony",
         "Camera Model": "Alpha A7 III",
