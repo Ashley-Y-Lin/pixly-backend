@@ -4,11 +4,12 @@ import os
 
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, insert
 from werkzeug.datastructures import FileStorage
 
 from PIL import Image, ImageOps, ImageChops, ImageFilter
 import requests
+from io import BytesIO
 
 from models import db, connect_db, Photo
 from aws import upload_photo_s3, remove_photo_s3
@@ -94,8 +95,44 @@ def create_photos_bulk():
     Takes as input an array of photos objects like:
         [ { caption, URL }... ]
 
-    Returns JSON like: { photosAdded: int }
+    Returns JSON of photos added, like:
+        {photo: [{id, caption, file_name, aws_s3, exif_data}...]}
     """
+    photos_data = request.json
+
+    photos = []
+    for photo in photos_data:
+        caption = photo.get("caption")
+        URL = photo.get("URL")
+
+        response = requests.get(URL)
+
+        file_object = BytesIO(response.content)
+
+        file_storage = FileStorage(
+            stream=file_object,
+            filename=caption,
+            content_type="image/jpeg",
+        )
+
+        s3_file_path = upload_photo_s3(file_storage)
+        exif_data = get_exif_data(file_storage)
+
+        photo = Photo(
+            caption=caption,
+            file_name=caption,
+            aws_s3=s3_file_path,
+            exif_data=exif_data or {},
+        )
+
+        photos.append(photo)
+
+        file_object.close()
+
+    db.session.execute(insert(Photo), [photo.to_dict() for photo in photos])
+    db.session.commit()
+
+    return (jsonify(photos=[photo.to_dict() for photo in photos]), 201)
 
 
 @app.get("/api/photos/<int:photo_id>")
@@ -114,7 +151,7 @@ def get_photo(photo_id):
 def update_photo(photo_id):
     """Update photo caption from data in request. Return updated data. The only
     field that can be updated is caption, takes as input JSON like
-    {"caption": string}
+    { caption, file_name, aws_s3, exif_data }
 
     Returns JSON like:
         {photo: [{id, caption, file_name, aws_s3, exif_data}]}
