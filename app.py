@@ -1,11 +1,14 @@
 """Flask app for Pix.ly"""
 
 import os
-import json
 
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from sqlalchemy import create_engine, text
+from werkzeug.datastructures import FileStorage
+
+from PIL import Image
+import requests
 
 from models import db, connect_db, Photo
 from aws import upload_photo_s3, remove_photo_s3
@@ -98,7 +101,9 @@ def get_photo(photo_id):
 
 @app.patch("/api/photos/<int:photo_id>")
 def update_photo(photo_id):
-    """Update photo caption from data in request. Return updated data.
+    """Update photo caption from data in request. Return updated data. The only
+    field that can be updated is caption, takes as input JSON like
+    {"caption": string}
 
     Returns JSON like:
         {photo: [{id, caption, file_name, aws_s3, exif_data}]}
@@ -167,9 +172,6 @@ def search_photos_metadata(search_term):
     """Searches photos for given metadata field values, using PostgreSQL
     full-text search. Used in metadata search on front-end.
 
-    Takes as input a string of exif_field:search_value pairs, separated by a
-    comma, like 'Make:Canon,Model:400'
-
     Returns JSON like:
         {photos: [{id, caption, file_name, aws_s3, exif_data}, ...]}
     """
@@ -181,13 +183,57 @@ def search_photos_metadata(search_term):
         FROM (
             SELECT *
             FROM photos
-            WHERE json_to_tsvector('English', exif_data, '"all"') @@ to_tsquery('make & canon')
+            WHERE json_to_tsvector('English', exif_data, '"all"') @@ to_tsquery(:search_term)
         ) t
         """
 
-        result = connection.execute(text(query))
+        result = connection.execute(text(query), {"search_term": search_term})
         # print("all rows", result.fetchall())
 
         rows = [row[0] for row in result]
 
         return jsonify(photos=rows)
+
+
+######### EDIT ROUTES #########
+
+
+@app.post("/api/photos/edit/<int:photo_id>/<edit_type>")
+def create_edit_preview(photo_id, edit_type):
+    """Edits photo, and returns local file link to edited photo preview.
+
+    Returns JSON like: {editedPhotoURL}
+        where editedPhotoURL is the local file path to edited photo
+    """
+
+    photo_data = Photo.query.get_or_404(photo_id)
+
+    # Download the image from AWS S3
+    response = requests.get(photo_data.aws_s3)
+
+    local_path = f"/Users/AshleyLin1/rithm/exercises/pix.ly/pix.ly frontend/pixly/src/edit-previews/original-{photo_id}.jpg"
+    with open(local_path, "wb") as file:
+        file.write(response.content)
+
+    image = Image.open(local_path)
+
+    # TODO: change edit type here
+    edited_image = image.convert("L")
+
+    edited_photo_filename = f"edited-{photo_id}.jpg"
+    edited_photo_url = f"/Users/AshleyLin1/rithm/exercises/pix.ly/pix.ly frontend/pixly/src/edit-previews/edited-{photo_id}.jpg"
+    edited_image.save(edited_photo_url)
+
+    file_object = open(edited_photo_url, "rb")
+
+    file_storage = FileStorage(
+        stream=file_object,
+        filename=edited_photo_filename,
+        content_type="image/jpeg",
+    )
+
+    s3_file_path = upload_photo_s3(file_storage)
+
+    file_object.close()
+
+    return {"editedPhotoURL": s3_file_path}
